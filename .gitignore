@@ -24,6 +24,8 @@ profile.cov
 go.work
 go.work.sum
 
+sun-netinstall-server
+
 # env file
 .env
 
