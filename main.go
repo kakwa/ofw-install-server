@@ -18,10 +18,14 @@ func main() {
 	iface := flag.String("i", "eth0", "interface to bind (Linux only)")
 	mapping := flag.String("map", "", "comma-separated MAC=IPv4 mappings (e.g. 52:54:00:12:34:56=192.168.1.10,aa:bb:cc:dd:ee:ff=192.168.1.11)")
 	poolCIDR := flag.String("pool", "", "CIDR pool for dynamic IP assignment (optional)")
-	tftpEnable := flag.Bool("tftp", false, "enable TFTP server")
 	tftpBind := flag.String("tftpaddr", ":69", "TFTP listen address")
 	tftpRoot := flag.String("tftproot", ".", "TFTP root directory")
 	tftpDefault := flag.String("tftpdefault", "", "Default image to serve for IP-hex filenames")
+	nfsAddr := flag.String("nfsaddr", ":2049", "NFS listen address")
+	nfsRoot := flag.String("nfsroot", "/nfsroot", "Filesystem path to export over NFS")
+	bpAddr := flag.String("bootparamaddr", ":10026", "Bootparam UDP listen address")
+	bpRoot := flag.String("bootparamroot", "/nfsroot", "Default NFS root path when -rootfs not set")
+	bpRootFS := flag.String("rootfs", "", "Client root filesystem (TFTP path/file), e.g. ./bsd.rd")
 	verbose := flag.Bool("v", false, "verbose logging")
 	flag.Parse()
 
@@ -63,8 +67,8 @@ func main() {
 
 	log.Printf("RARP server on %s (MAC %s, IP %s) listening for requests...", ifc.Name, ifc.HardwareAddr, serverIP)
 
-	// Optionally start TFTP server
-	if *tftpEnable {
+	// Start TFTP server
+	{
 		logger := log.New(os.Stdout, "tftp ", log.LstdFlags)
 		_, err := StartTFTPServer(*tftpBind, *tftpRoot, *tftpDefault, logger)
 		if err != nil {
@@ -76,6 +80,36 @@ func main() {
 		// Small delay to ensure TFTP goroutine starts before entering RARP loop
 		time.Sleep(50 * time.Millisecond)
 	}
+
+	// Start NFS server
+	{
+		logger := log.New(os.Stdout, "nfs ", log.LstdFlags)
+		_, err := StartNFSServer(NFSConfig{Addr: *nfsAddr, Root: *nfsRoot}, logger)
+		if err != nil {
+			log.Fatalf("start nfs: %v", err)
+		}
+		if *verbose {
+			log.Printf("NFS exporting %s at %s", *nfsRoot, *nfsAddr)
+		}
+	}
+
+	// Start Bootparam server (announces either TFTP rootfs or NFS root path)
+	{
+		logger := log.New(os.Stdout, "bootparam ", log.LstdFlags)
+		_, err := StartBootparamUDP(BootparamConfig{
+			Addr:     *bpAddr,
+			RootPath: *bpRoot,
+			RootFS:   *bpRootFS,
+		}, serverIP, logger)
+		if err != nil {
+			log.Fatalf("start bootparam: %v", err)
+		}
+		if *verbose {
+			log.Printf("Bootparam enabled at %s (rootfs=%s, nfsroot=%s)", *bpAddr, *bpRootFS, *bpRoot)
+		}
+	}
+
+	// BOOTP removed per request; using Bootparams/NFS instead
 
 	reader := bufio.NewReader(os.NewFile(uintptr(fd), fmt.Sprintf("fd%d", fd)))
 	for {
