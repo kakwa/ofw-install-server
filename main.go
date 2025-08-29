@@ -7,6 +7,7 @@ import (
 	"log"
 	"net"
 	"os"
+	"time"
 
 	"golang.org/x/sys/unix"
 )
@@ -16,6 +17,11 @@ import (
 func main() {
 	iface := flag.String("i", "eth0", "interface to bind (Linux only)")
 	mapping := flag.String("map", "", "comma-separated MAC=IPv4 mappings (e.g. 52:54:00:12:34:56=192.168.1.10,aa:bb:cc:dd:ee:ff=192.168.1.11)")
+	poolCIDR := flag.String("pool", "", "CIDR pool for dynamic IP assignment (optional)")
+	tftpEnable := flag.Bool("tftp", false, "enable TFTP server")
+	tftpBind := flag.String("tftpaddr", ":69", "TFTP listen address")
+	tftpRoot := flag.String("tftproot", ".", "TFTP root directory")
+	tftpDefault := flag.String("tftpdefault", "", "Default image to serve for IP-hex filenames")
 	verbose := flag.Bool("v", false, "verbose logging")
 	flag.Parse()
 
@@ -34,6 +40,21 @@ func main() {
 		log.Fatalf("%v", err)
 	}
 
+	// Optional allocator
+	var allocator *IPv4Allocator
+	if *poolCIDR != "" {
+		a, err := NewIPv4AllocatorFromCIDR(*poolCIDR)
+		if err != nil {
+			log.Fatalf("allocator: %v", err)
+		}
+		// Reserve server IP and all statically mapped IPs
+		a.ReserveIP(serverIP)
+		for _, ip4 := range macToIP {
+			a.ReserveIP(net.IP(ip4[:]))
+		}
+		allocator = a
+	}
+
 	fd, err := openRawSocket(ifc)
 	if err != nil {
 		log.Fatalf("%v", err)
@@ -41,6 +62,20 @@ func main() {
 	defer unix.Close(fd)
 
 	log.Printf("RARP server on %s (MAC %s, IP %s) listening for requests...", ifc.Name, ifc.HardwareAddr, serverIP)
+
+	// Optionally start TFTP server
+	if *tftpEnable {
+		logger := log.New(os.Stdout, "tftp ", log.LstdFlags)
+		_, err := StartTFTPServer(*tftpBind, *tftpRoot, *tftpDefault, logger)
+		if err != nil {
+			log.Fatalf("start tftp: %v", err)
+		}
+		if *verbose {
+			log.Printf("TFTP server enabled at %s (root=%s, default=%s)", *tftpBind, *tftpRoot, *tftpDefault)
+		}
+		// Small delay to ensure TFTP goroutine starts before entering RARP loop
+		time.Sleep(50 * time.Millisecond)
+	}
 
 	reader := bufio.NewReader(os.NewFile(uintptr(fd), fmt.Sprintf("fd%d", fd)))
 	for {
@@ -72,10 +107,26 @@ func main() {
 		var targetMAC [6]byte = pkt.THA
 		ip4, ok := macToIP[targetMAC]
 		if !ok {
-			if *verbose {
-				log.Printf("no mapping for %02x:%02x:%02x:%02x:%02x:%02x", targetMAC[0], targetMAC[1], targetMAC[2], targetMAC[3], targetMAC[4], targetMAC[5])
+			// Try dynamic allocation if enabled
+			if allocator != nil {
+				if alloc, ok2 := allocator.AllocateForMAC(targetMAC); ok2 {
+					ip4 = alloc
+					ok = true
+					if *verbose {
+						log.Printf("dynamically allocated %d.%d.%d.%d for %02x:%02x:%02x:%02x:%02x:%02x",
+							ip4[0], ip4[1], ip4[2], ip4[3],
+							targetMAC[0], targetMAC[1], targetMAC[2], targetMAC[3], targetMAC[4], targetMAC[5],
+						)
+					}
+				}
 			}
-			continue
+			if !ok {
+				if *verbose {
+					log.Printf("no mapping for %02x:%02x:%02x:%02x:%02x:%02x and no pool or no free IP",
+						targetMAC[0], targetMAC[1], targetMAC[2], targetMAC[3], targetMAC[4], targetMAC[5])
+				}
+				continue
+			}
 		}
 
 		reply, err := buildRarpReply(ifc.HardwareAddr, serverIP, net.HardwareAddr(pkt.THA[:]), net.IP(ip4[:]))
