@@ -1,4 +1,4 @@
-# ofw-netinstall-server
+# ofw-install-server
 
 ## Presentation
 
@@ -28,7 +28,7 @@ export BOOT_SERVER_IP=172.24.42.150
 export BOOT_SERVER_NIC=enp0s25
 sudo ip addr add ${BOOT_SERVER_IP}/24 dev ${BOOT_SERVER_NIC}
 
-sudo ./ofw-netinstall-server -tftpdefault ofwboot.net -i ${BOOT_SERVER_NIC}
+sudo ./ofw-install-server -tftpdefault boot.img -i ${BOOT_SERVER_NIC}
 ```
 
 Options:

@@ -1,4 +1,4 @@
-module sun-netinstall-server
+module ofw-install-server
 
 go 1.24.4
 

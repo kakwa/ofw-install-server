@@ -1,4 +1,4 @@
-APP_NAME := ofw-netinstall-server
+APP_NAME := ofw-install-server
 
 .PHONY: build run tidy fmt vet clean
 

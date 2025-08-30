@@ -24,7 +24,7 @@ profile.cov
 go.work
 go.work.sum
 
-ofw-netinstall-server
+ofw-install-server
 
 # env file
 .env
