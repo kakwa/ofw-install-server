@@ -151,12 +151,12 @@ func parseIncomingRarp(b []byte) (EthHdr, RarpPacket, error) {
 func StartRARPServer(iface *string, logger *log.Logger) (string, error) {
 	ifc, err := ifaceByName(*iface)
 	if err != nil {
-		log.Fatalf("%v", err)
+		return "", err
 	}
 
 	serverIP, err := firstIPv4Addr(*iface)
 	if err != nil {
-		log.Fatalf("%v", err)
+		return "", err
 	}
 
 	// Optional allocator
@@ -165,73 +165,97 @@ func StartRARPServer(iface *string, logger *log.Logger) (string, error) {
 	// Derive CIDR using netutil helper
 	cidr, err := cidrFromInterface(ifc, serverIP)
 	if err != nil {
-		log.Fatalf("cidr: %v", err)
+		return "", fmt.Errorf("cidr: %w", err)
 	}
 	a, err := NewIPv4AllocatorFromCIDR(cidr)
 	if err != nil {
-		log.Fatalf("allocator: %v", err)
+		return "", fmt.Errorf("allocator: %w", err)
 	}
 	// Reserve server IP and all statically mapped IPs
 	a.ReserveIP(serverIP)
 	allocator = a
 
-	fd, err := openRawSocket(ifc)
-	if err != nil {
-		log.Fatalf("%v", err)
-	}
-	defer unix.Close(fd)
-
-	logger.Printf("RARP server on %s (MAC %s, IP %s) listening for requests...", ifc.Name, ifc.HardwareAddr, serverIP)
-
-	reader := bufio.NewReader(os.NewFile(uintptr(fd), fmt.Sprintf("fd%d", fd)))
-	for {
-		// Read a single Ethernet frame (up to MTU; 1518 is safe default)
-		buf := make([]byte, 2048)
-		n, err := reader.Read(buf)
+	go func() {
+		fd, err := openRawSocket(ifc)
 		if err != nil {
-			log.Fatalf("read: %v", err)
+			if logger != nil {
+				logger.Printf("rarp socket error: %v", err)
+			}
+			return
 		}
-		frame := buf[:n]
-		_, pkt, err := parseIncomingRarp(frame)
-		if err != nil {
-			// not RARP or malformed; skip silently unless verbose
-			logger.Printf("skip frame: %v", err)
-			continue
+		defer unix.Close(fd)
+
+		if logger != nil {
+			logger.Printf("RARP server on %s (MAC %s, IP %s) listening for requests...", ifc.Name, ifc.HardwareAddr, serverIP)
 		}
 
-		// Only handle RARP requests
-		if pkt.Oper != RARP_REQUEST {
-			logger.Printf("ignore opcode %d", pkt.Oper)
-			continue
-		}
+		reader := bufio.NewReader(os.NewFile(uintptr(fd), fmt.Sprintf("fd%d", fd)))
+		for {
+			// Read a single Ethernet frame (up to MTU; 1518 is safe default)
+			buf := make([]byte, 2048)
+			n, err := reader.Read(buf)
+			if err != nil {
+				if logger != nil {
+					logger.Printf("rarp read error: %v", err)
+				}
+				return
+			}
+			frame := buf[:n]
+			_, pkt, err := parseIncomingRarp(frame)
+			if err != nil {
+				// not RARP or malformed; skip silently unless verbose
+				if logger != nil {
+					logger.Printf("skip frame: %v", err)
+				}
+				continue
+			}
 
-		// Target MAC is who is asking for its IP
-		var targetMAC [6]byte = pkt.THA
-		var ip4 [4]byte
-		if alloc, ok := allocator.AllocateForMAC(targetMAC); ok {
-			ip4 = alloc
-			log.Printf("dynamically allocated %d.%d.%d.%d for %02x:%02x:%02x:%02x:%02x:%02x",
-				ip4[0], ip4[1], ip4[2], ip4[3],
-				targetMAC[0], targetMAC[1], targetMAC[2], targetMAC[3], targetMAC[4], targetMAC[5],
-			)
-		}
+			// Only handle RARP requests
+			if pkt.Oper != RARP_REQUEST {
+				if logger != nil {
+					logger.Printf("ignore opcode %d", pkt.Oper)
+				}
+				continue
+			}
 
-		reply, err := buildRarpReply(ifc.HardwareAddr, serverIP, net.HardwareAddr(pkt.THA[:]), net.IP(ip4[:]))
-		if err != nil {
-			logger.Printf("build reply: %v", err)
-			continue
-		}
+			// Target MAC is who is asking for its IP
+			var targetMAC [6]byte = pkt.THA
+			var ip4 [4]byte
+			if alloc, ok := allocator.AllocateForMAC(targetMAC); ok {
+				ip4 = alloc
+				if logger != nil {
+					logger.Printf("dynamically allocated %d.%d.%d.%d for %02x:%02x:%02x:%02x:%02x:%02x",
+						ip4[0], ip4[1], ip4[2], ip4[3],
+						targetMAC[0], targetMAC[1], targetMAC[2], targetMAC[3], targetMAC[4], targetMAC[5],
+					)
+				}
+			}
 
-		// Send using sendto() with SockaddrLinklayer (dst MAC is in frame)
-		ll := &unix.SockaddrLinklayer{Ifindex: ifc.Index}
-		if err := unix.Sendto(fd, reply, 0, ll); err != nil {
-			logger.Printf("sendto: %v", err)
-			continue
-		}
+			reply, err := buildRarpReply(ifc.HardwareAddr, serverIP, net.HardwareAddr(pkt.THA[:]), net.IP(ip4[:]))
+			if err != nil {
+				if logger != nil {
+					logger.Printf("build reply: %v", err)
+				}
+				continue
+			}
 
-		logger.Printf("answered RARP for %02x:%02x:%02x:%02x:%02x:%02x -> %d.%d.%d.%d",
-			pkt.THA[0], pkt.THA[1], pkt.THA[2], pkt.THA[3], pkt.THA[4], pkt.THA[5],
-			ip4[0], ip4[1], ip4[2], ip4[3],
-		)
-	}
+			// Send using sendto() with SockaddrLinklayer (dst MAC is in frame)
+			ll := &unix.SockaddrLinklayer{Ifindex: ifc.Index}
+			if err := unix.Sendto(fd, reply, 0, ll); err != nil {
+				if logger != nil {
+					logger.Printf("sendto: %v", err)
+				}
+				continue
+			}
+
+			if logger != nil {
+				logger.Printf("answered RARP for %02x:%02x:%02x:%02x:%02x:%02x -> %d.%d.%d.%d",
+					pkt.THA[0], pkt.THA[1], pkt.THA[2], pkt.THA[3], pkt.THA[4], pkt.THA[5],
+					ip4[0], ip4[1], ip4[2], ip4[3],
+				)
+			}
+		}
+	}()
+
+	return ifc.Name, nil
 }

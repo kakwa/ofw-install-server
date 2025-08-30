@@ -4,6 +4,8 @@ import (
 	"flag"
 	"log"
 	"os"
+	"os/signal"
+	"syscall"
 )
 
 func main() {
@@ -27,4 +29,10 @@ func main() {
 		log.Fatalf("start arp failure: %v", err)
 	}
 	loggerRARP.Printf("RARP server enabled on %s", *iface)
+
+	// Block until termination signal to keep goroutine servers alive
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
+	sig := <-stop
+	log.Printf("received signal %s, exiting", sig)
 }
