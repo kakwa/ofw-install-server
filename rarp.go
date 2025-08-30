@@ -73,14 +73,14 @@ func buildRarpReply(serverMAC net.HardwareAddr, serverIP net.IP, targetMAC net.H
 	var eth EthHdr
 	copy(eth.Dst[:], targetMAC[:6])
 	copy(eth.Src[:], serverMAC[:6])
-	eth.Type = htons(ETH_P_RARP)
+	eth.Type = ETH_P_RARP
 
 	var pkt RarpPacket
-	pkt.HType = htons(1)        // Ethernet
-	pkt.PType = htons(ETH_P_IP) // IPv4
+	pkt.HType = 1        // Ethernet
+	pkt.PType = ETH_P_IP // IPv4
 	pkt.HLEN = 6
 	pkt.PLEN = 4
-	pkt.Oper = htons(RARP_REPLY)
+	pkt.Oper = RARP_REPLY
 	pkt.SHA = macToArray(serverMAC)
 	pkt.SPA = ipToArray(serverIP)
 	pkt.THA = macToArray(targetMAC)
@@ -123,7 +123,7 @@ func parseIncomingRarp(b []byte) (EthHdr, RarpPacket, error) {
 	copy(eth.Dst[:], b[0:6])
 	copy(eth.Src[:], b[6:12])
 	eth.Type = binary.BigEndian.Uint16(b[12:14])
-	if eth.Type != htons(ETH_P_RARP) {
+	if eth.Type != ETH_P_RARP {
 		return eth, pkt, fmt.Errorf("not RARP ethertype: 0x%04x", eth.Type)
 	}
 	o := 14
@@ -195,7 +195,7 @@ func StartRARPServer(iface *string, logger *log.Logger) (string, error) {
 		}
 
 		// Only handle RARP requests
-		if pkt.Oper != htons(RARP_REQUEST) {
+		if pkt.Oper != RARP_REQUEST {
 			logger.Printf("ignore opcode %d", pkt.Oper)
 			continue
 		}

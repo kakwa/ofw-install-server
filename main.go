@@ -20,8 +20,6 @@ func main() {
 		log.Fatalf("start tftp failure: %v", err)
 	}
 
-	loggerTFTP.Printf("TFTP server enabled at %s (root=%s, default=%s)", "69", *tftpRoot, *tftpDefault)
-
 	loggerRARP := log.New(os.Stdout, "rarp ", log.LstdFlags)
 	_, err = StartRARPServer(iface, loggerRARP)
 
