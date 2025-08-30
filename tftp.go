@@ -20,6 +20,7 @@ func StartTFTPServer(addr, rootDir, defaultImage string, logger *log.Logger) (*t
 		base := filepath.Base(strings.TrimSpace(filename))
 		// When the requested file name is an IPv4 hex (8 hex chars), serve the default image.
 		if isHexIPv4Name(base) {
+			logger.Printf("HexIPv4 form detected, serving default file: %s", defaultImage)
 			if defaultImage == "" {
 				return os.ErrNotExist
 			}
@@ -33,6 +34,7 @@ func StartTFTPServer(addr, rootDir, defaultImage string, logger *log.Logger) (*t
 		if !withinRoot(rootDir, full) {
 			return os.ErrPermission
 		}
+		logger.Printf("serving file: %s", full)
 		return serveFile(full, rf)
 	}
 
@@ -41,9 +43,7 @@ func StartTFTPServer(addr, rootDir, defaultImage string, logger *log.Logger) (*t
 	srv.SetTimeout(5 * time.Second)
 
 	go func() {
-		if logger != nil {
-			logger.Printf("TFTP server listening on %s, root=%q default=%q", addr, rootDir, defaultImage)
-		}
+		logger.Printf("TFTP server listening on %s, root=%q default=%q", addr, rootDir, defaultImage)
 		if err := srv.ListenAndServe(addr); err != nil {
 			if logger != nil {
 				logger.Printf("TFTP server error: %v", err)

@@ -1,11 +1,11 @@
 package main
 
 import (
+	"bufio"
 	"encoding/binary"
 	"fmt"
-	"net"
 	"log"
-	"bufio"
+	"net"
 	"os"
 
 	"golang.org/x/sys/unix"
@@ -202,13 +202,13 @@ func StartRARPServer(iface *string, logger *log.Logger) (string, error) {
 
 		// Target MAC is who is asking for its IP
 		var targetMAC [6]byte = pkt.THA
-        var ip4 [4]byte
+		var ip4 [4]byte
 		if alloc, ok := allocator.AllocateForMAC(targetMAC); ok {
 			ip4 = alloc
 			log.Printf("dynamically allocated %d.%d.%d.%d for %02x:%02x:%02x:%02x:%02x:%02x",
-					ip4[0], ip4[1], ip4[2], ip4[3],
-					targetMAC[0], targetMAC[1], targetMAC[2], targetMAC[3], targetMAC[4], targetMAC[5],
-				)
+				ip4[0], ip4[1], ip4[2], ip4[3],
+				targetMAC[0], targetMAC[1], targetMAC[2], targetMAC[3], targetMAC[4], targetMAC[5],
+			)
 		}
 
 		reply, err := buildRarpReply(ifc.HardwareAddr, serverIP, net.HardwareAddr(pkt.THA[:]), net.IP(ip4[:]))
@@ -225,8 +225,8 @@ func StartRARPServer(iface *string, logger *log.Logger) (string, error) {
 		}
 
 		logger.Printf("answered RARP for %02x:%02x:%02x:%02x:%02x:%02x -> %d.%d.%d.%d",
-				pkt.THA[0], pkt.THA[1], pkt.THA[2], pkt.THA[3], pkt.THA[4], pkt.THA[5],
-				ip4[0], ip4[1], ip4[2], ip4[3],
+			pkt.THA[0], pkt.THA[1], pkt.THA[2], pkt.THA[3], pkt.THA[4], pkt.THA[5],
+			ip4[0], ip4[1], ip4[2], ip4[3],
 		)
 	}
 }
