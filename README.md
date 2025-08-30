@@ -2,11 +2,7 @@
 
 ## Presentation
 
-Minimal RARP+TFTP server for netbooting old Open Firmware based computers:
-
-* Sun Sparc64 (V240, Netra, T1000, etc)
-* Apple PowerPC (PowerBook & PowerMac G3/G4/G5)
-* IBM Power (P4, P5, etc)
+Minimal RARP+TFTP server for netbooting old Sun Open Firmware based computers (Sun UltaSparc64 like V240, Netra, T1000, etc.
 
 Linux-only (uses `AF_PACKET` raw sockets).
 
