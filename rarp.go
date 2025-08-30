@@ -162,7 +162,12 @@ func StartRARPServer(iface *string, logger *log.Logger) (string, error) {
 	// Optional allocator
 	var allocator *IPv4Allocator
 
-	a, err := NewIPv4AllocatorFromCIDR("172.24.42.150/24")
+	// Derive CIDR using netutil helper
+	cidr, err := cidrFromInterface(ifc, serverIP)
+	if err != nil {
+		log.Fatalf("cidr: %v", err)
+	}
+	a, err := NewIPv4AllocatorFromCIDR(cidr)
 	if err != nil {
 		log.Fatalf("allocator: %v", err)
 	}
