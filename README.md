@@ -12,6 +12,8 @@ Linux-only (uses `AF_PACKET` raw sockets).
 
 It implements a rough (and vibe coded) rarp server + a TFTP server handling the "IP in Hexa" file path used by Open Firmware.
 
+It's meant to be a simpler option than the [traditional setup](https://github.com/kakwa/ofw-install-server/blob/main/MANUAL_SETUP.md).
+
 ## Build
 
 ```bash
