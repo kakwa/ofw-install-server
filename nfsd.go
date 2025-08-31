@@ -4,7 +4,6 @@ import (
 	"log"
 	"net"
 	"os"
-	"path/filepath"
 	"time"
 )
 
@@ -53,7 +52,7 @@ func StartNFSD(addr string, baseDir string, logger *log.Logger) (net.PacketConn,
 	return pc, nil
 }
 
-func handleNFSD(pkt []byte, baseDir string, logger *log.Logger) []byte {
+func handleNFSD(pkt []byte, defaultFile string, logger *log.Logger) []byte {
 	xid, prog, vers, proc, rr, err := parseRPCCall(pkt)
 	if err != nil {
 		return nil
@@ -72,10 +71,8 @@ func handleNFSD(pkt []byte, baseDir string, logger *log.Logger) []byte {
 		if err != nil {
 			return rpcReplyDeniedAuth(xid)
 		}
-		if logger != nil {
-			logger.Printf("nfsd GETATTR for root -> %q", baseDir)
-		}
-		return nfsReplyAttrOK(xid, baseDir)
+		logger.Printf("nfsd GETATTR for root -> /")
+		return nfsReplyAttrOK(xid, defaultFile)
 	case nfsProcLookup:
 		logger.Printf("nfsProcLookup")
 		// args: diropargs: dir(fh fixed32), name(string)
@@ -90,14 +87,8 @@ func handleNFSD(pkt []byte, baseDir string, logger *log.Logger) []byte {
 		}
 		logger.Printf("nfsd LOOKUP attempt: %q", string(name))
 
-		target := filepath.Join(baseDir, filepath.Clean(string(name)))
+		target := defaultFile
 		logger.Printf("nfsd LOOKUP name=%q -> %q", string(name), target)
-		if !withinRoot(baseDir, target) {
-			if logger != nil {
-				logger.Printf("nfsd LOOKUP denied (outside root): %q", target)
-			}
-			return nfsReplyErrNoEnt(xid)
-		}
 		if _, err := os.Stat(target); err != nil {
 			if logger != nil {
 				logger.Printf("nfsd LOOKUP noent: %q", target)
@@ -118,11 +109,11 @@ func handleNFSD(pkt []byte, baseDir string, logger *log.Logger) []byte {
 	case nfsProcRead:
 		logger.Printf("nfsProcRead")
 		// args: fh(fixed32), offset(uint32), count(uint32), totalcount(uint32)
-		_, err := rr.readFixed(32)
-		//fh, err := rr.readFixed(32)
+		//_, err := rr.readFixed(32)
+		fh, err := rr.readFixed(32)
 		if err != nil {
 			logger.Printf("file handle (fh) recovery failed")
-			return rpcReplyDeniedAuth(xid)
+			//return rpcReplyDeniedAuth(xid)
 		}
 		offset, err := rr.readUint32()
 		if err != nil {
@@ -136,16 +127,12 @@ func handleNFSD(pkt []byte, baseDir string, logger *log.Logger) []byte {
 		}
 		// totalcount ignored
 		_, _ = rr.readUint32()
-		//p, ok := pathForHandle(fh)
-		//if !ok {
-		//	logger.Printf("path/p recovery failed")
-		//	return nfsReplyErrNoEnt(xid)
-		//}
-		//if !withinRoot(baseDir, p) {
-		//	return nfsReplyErrNoEnt(xid)
-		//}
-		p := "bsd"
-		f, err := os.Open(p)
+		p, ok := pathForHandle(fh)
+		if !ok {
+			logger.Printf("path/p recovery failed")
+			//return nfsReplyErrNoEnt(xid)
+		}
+		f, err := os.Open(defaultFile)
 		if err != nil {
 			return nfsReplyErrNoEnt(xid)
 		}
@@ -159,7 +146,7 @@ func handleNFSD(pkt []byte, baseDir string, logger *log.Logger) []byte {
 		w := &xdrWriter{}
 		w.b = append(w.b, rpcReplyHeaderAccepted(xid)...)
 		w.writeUint32(0) // status OK
-		writeNFSV2Fattr(w, p)
+		writeNFSV2Fattr(w, defaultFile)
 		w.writeOpaque(buf) // data as counted opaque
 		return w.b
 	default:
