@@ -10,7 +10,9 @@ import (
 
 func main() {
 	iface := flag.String("iface", "enp0s25", "interface to bind")
+	rarpEnable := flag.Bool("rarp", false, "Enable built-in RARP server")
 	// TFTP flags
+	tftpEnable := flag.Bool("tftp", false, "Enable built-in TFTP")
 	tftpFile := flag.String("tftp-file", "", "file to serve using TFTP (step 1)")
 	// BOOTP/DHCP flags
 	bootpEnable := flag.Bool("bootp", false, "Enable built-in BOOTP/DHCP server")
@@ -23,11 +25,13 @@ func main() {
 	flag.Parse()
 
 	// Start TFTP server
-	loggerTFTP := log.New(os.Stdout, "tftp ", log.LstdFlags)
-	_, err := StartTFTPServer(":69", *tftpFile, loggerTFTP)
+	if *tftpEnable {
+		loggerTFTP := log.New(os.Stdout, "tftp ", log.LstdFlags)
+		_, err := StartTFTPServer(":69", *tftpFile, loggerTFTP)
 
-	if err != nil {
-		log.Fatalf("start tftp failure: %v", err)
+		if err != nil {
+			log.Fatalf("start tftp failure: %v", err)
+		}
 	}
 
 	// Optionally start minimal portmap and UDP proxies for mountd/nfs
@@ -64,11 +68,13 @@ func main() {
 		loggerBOOTP.Printf("BOOTP server enabled on %s with pool %s-%s", *iface, allocator.start, allocator.end)
 	}
 
-	// Start RARP server
-	if err != nil {
-		log.Fatalf("start arp failure: %v", err)
+	if *rarpEnable {
+		// Start RARP server
+		if err != nil {
+			log.Fatalf("start arp failure: %v", err)
+		}
+		loggerRARP.Printf("RARP server enabled on %s", *iface)
 	}
-	loggerRARP.Printf("RARP server enabled on %s", *iface)
 
 	// Block until termination signal to keep goroutine servers alive
 	stop := make(chan os.Signal, 1)
