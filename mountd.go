@@ -3,7 +3,6 @@ package main
 import (
 	"log"
 	"net"
-	"os"
 	"path/filepath"
 )
 
@@ -73,26 +72,6 @@ func handleMountd(pkt []byte, baseDir string, logger *log.Logger) []byte {
 		full := filepath.Join(baseDir, clean)
 		if logger != nil {
 			logger.Printf("mountd MNT request path=%q full=%q", clean, full)
-		}
-		if !withinRoot(baseDir, full) {
-			// return status error (NFSERR_PERM = 1). For v1, fhandle length 32 opaque on success.
-			w := &xdrWriter{}
-			w.b = append(w.b, rpcReplyHeaderAccepted(xid)...)
-			w.writeUint32(1) // status error
-			if logger != nil {
-				logger.Printf("mountd deny (outside root) path=%q", full)
-			}
-			return w.b
-		}
-		// ensure exists
-		if s, err := os.Stat(full); err != nil || !s.IsDir() {
-			w := &xdrWriter{}
-			w.b = append(w.b, rpcReplyHeaderAccepted(xid)...)
-			w.writeUint32(2) // NFSERR_NOENT simplistic
-			if logger != nil {
-				logger.Printf("mountd deny (no such dir) path=%q", full)
-			}
-			return w.b
 		}
 		// success: status=0 and a 32-byte file handle derived from path
 		w := &xdrWriter{}
