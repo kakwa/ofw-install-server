@@ -31,18 +31,18 @@ func TestParseIncomingRarp(t *testing.T) {
 	// Ethernet header
 	copy(buf[0:6], serverMAC[:])
 	copy(buf[6:12], clientMAC[:])
-	binary.BigEndian.PutUint16(buf[12:14], htons(ETH_P_RARP))
+	binary.BigEndian.PutUint16(buf[12:14], ETH_P_RARP)
 	// RARP payload
 	o := 14
-	binary.BigEndian.PutUint16(buf[o:o+2], htons(1)) // HType Ethernet
+	binary.BigEndian.PutUint16(buf[o:o+2], 1) // HType Ethernet
 	o += 2
-	binary.BigEndian.PutUint16(buf[o:o+2], htons(ETH_P_IP)) // PType IPv4
+	binary.BigEndian.PutUint16(buf[o:o+2], ETH_P_IP) // PType IPv4
 	o += 2
 	buf[o] = 6 // HLEN
 	o++
 	buf[o] = 4 // PLEN
 	o++
-	binary.BigEndian.PutUint16(buf[o:o+2], htons(RARP_REQUEST)) // Oper
+	binary.BigEndian.PutUint16(buf[o:o+2], RARP_REQUEST) // Oper
 	o += 2
 	copy(buf[o:o+6], clientMAC[:]) // SHA (sender MAC)
 	o += 6
@@ -56,10 +56,10 @@ func TestParseIncomingRarp(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parseIncomingRarp error: %v", err)
 	}
-	if eth.Type != htons(ETH_P_RARP) {
+	if eth.Type != ETH_P_RARP {
 		t.Fatalf("unexpected ethertype: 0x%04x", eth.Type)
 	}
-	if pkt.Oper != htons(RARP_REQUEST) {
+	if pkt.Oper != RARP_REQUEST {
 		t.Fatalf("unexpected oper: %d", pkt.Oper)
 	}
 	if pkt.HLEN != 6 || pkt.PLEN != 4 {
@@ -84,10 +84,10 @@ func TestBuildRarpReplyAndParse(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parseIncomingRarp error: %v", err)
 	}
-	if eth.Type != htons(ETH_P_RARP) {
+	if eth.Type != ETH_P_RARP {
 		t.Fatalf("unexpected ethertype: 0x%04x", eth.Type)
 	}
-	if pkt.Oper != htons(RARP_REPLY) {
+	if pkt.Oper != RARP_REPLY {
 		t.Fatalf("unexpected oper: %d", pkt.Oper)
 	}
 	if pkt.SHA != macToArray(serverMAC) || pkt.THA != macToArray(clientMAC) {
