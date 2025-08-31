@@ -53,7 +53,10 @@ func StartPortmapServer(addr string, mountdPort, nfsPort, nlockmgrPort uint32, l
 				}
 				return
 			}
-			resp, err := handlePortmapUDP(buf[:n], mountdPort, nfsPort, nlockmgrPort)
+			resp, prog, vers, proc, err := handlePortmapUDP(buf[:n], mountdPort, nfsPort, nlockmgrPort)
+			if logger != nil && err == nil {
+				logger.Printf("portmap call from %s prog=%d vers=%d proc=%d", raddr.String(), prog, vers, proc)
+			}
 			if err != nil {
 				// ignore malformed
 				continue
@@ -64,7 +67,7 @@ func StartPortmapServer(addr string, mountdPort, nfsPort, nlockmgrPort uint32, l
 	return pc, nil
 }
 
-func handlePortmapUDP(req []byte, mountdPort, nfsPort, nlockmgrPort uint32) ([]byte, error) {
+func handlePortmapUDP(req []byte, mountdPort, nfsPort, nlockmgrPort uint32) ([]byte, uint32, uint32, uint32, error) {
 	// Minimal RPC header parse
 	// struct rpc_msg {
 	//   unsigned int xid;
@@ -75,16 +78,16 @@ func handlePortmapUDP(req []byte, mountdPort, nfsPort, nlockmgrPort uint32) ([]b
 	//   } body;
 	// }
 	if len(req) < 24 { // xid(4) mtype(4) rpcvers(4) prog(4) vers(4) proc(4)
-		return nil, errors.New("short rpc")
+		return nil, 0, 0, 0, errors.New("short rpc")
 	}
 	xid := binary.BigEndian.Uint32(req[0:4])
 	mtype := binary.BigEndian.Uint32(req[4:8])
 	if mtype != rpcCall {
-		return nil, errors.New("not call")
+		return nil, 0, 0, 0, errors.New("not call")
 	}
 	rpcvers := binary.BigEndian.Uint32(req[8:12])
 	if rpcvers != rpcVersion2 {
-		return nil, errors.New("rpc version")
+		return nil, 0, 0, 0, errors.New("rpc version")
 	}
 	prog := binary.BigEndian.Uint32(req[12:16])
 	vers := binary.BigEndian.Uint32(req[16:20])
@@ -94,7 +97,7 @@ func handlePortmapUDP(req []byte, mountdPort, nfsPort, nlockmgrPort uint32) ([]b
 	off := 24
 	// cred
 	if len(req) < off+8 {
-		return nil, errors.New("short cred")
+		return nil, 0, 0, 0, errors.New("short cred")
 	}
 	// flavor := binary.BigEndian.Uint32(req[off:off+4])
 	llen := int(binary.BigEndian.Uint32(req[off+4 : off+8]))
@@ -102,23 +105,23 @@ func handlePortmapUDP(req []byte, mountdPort, nfsPort, nlockmgrPort uint32) ([]b
 	// payload padded to 4
 	off += ((llen + 3) &^ 3)
 	if len(req) < off+8 {
-		return nil, errors.New("short verf")
+		return nil, 0, 0, 0, errors.New("short verf")
 	}
 	vlen := int(binary.BigEndian.Uint32(req[off+4 : off+8]))
 	off += 8
 	off += ((vlen + 3) &^ 3)
 
 	if prog != programPortmap || vers != portmapVersion2 {
-		return rpcErrorReply(xid), nil
+		return rpcErrorReply(xid), prog, vers, proc, nil
 	}
 
 	switch proc {
 	case procPMAPPROC_NULL:
-		return rpcNullReply(xid), nil
+		return rpcNullReply(xid), prog, vers, proc, nil
 	case procPMAPPROC_GETPORT:
 		// GETPORT args: program(4) version(4) protocol(4) port(4)
 		if len(req) < off+16 {
-			return nil, errors.New("short getport args")
+			return nil, 0, 0, 0, errors.New("short getport args")
 		}
 		pprog := binary.BigEndian.Uint32(req[off : off+4])
 		pvers := binary.BigEndian.Uint32(req[off+4 : off+8])
@@ -136,9 +139,9 @@ func handlePortmapUDP(req []byte, mountdPort, nfsPort, nlockmgrPort uint32) ([]b
 		default:
 			port = 0
 		}
-		return rpcUintReply(xid, port), nil
+		return rpcUintReply(xid, port), prog, vers, proc, nil
 	default:
-		return rpcErrorReply(xid), nil
+		return rpcErrorReply(xid), prog, vers, proc, nil
 	}
 }
 

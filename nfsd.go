@@ -19,6 +19,7 @@ const (
 	nfsProcNull    = 0
 	nfsProcGetAttr = 1
 	nfsProcLookup  = 4
+	nfsProcRead    = 6
 )
 
 // StartNFSD runs a tiny NFS v2 UDP server rooted at baseDir.
@@ -43,7 +44,7 @@ func StartNFSD(addr string, baseDir string, logger *log.Logger) (net.PacketConn,
 				}
 				return
 			}
-			resp := handleNFSD(buf[:n], baseDir)
+			resp := handleNFSD(buf[:n], baseDir, logger)
 			if resp != nil {
 				_, _ = pc.WriteTo(resp, raddr)
 			}
@@ -52,7 +53,7 @@ func StartNFSD(addr string, baseDir string, logger *log.Logger) (net.PacketConn,
 	return pc, nil
 }
 
-func handleNFSD(pkt []byte, baseDir string) []byte {
+func handleNFSD(pkt []byte, baseDir string, logger *log.Logger) []byte {
 	xid, prog, vers, proc, rr, err := parseRPCCall(pkt)
 	if err != nil {
 		return nil
@@ -62,30 +63,47 @@ func handleNFSD(pkt []byte, baseDir string) []byte {
 	}
 	switch proc {
 	case nfsProcNull:
+		logger.Printf("nfsProcNull")
 		return rpcReplyHeaderAccepted(xid)
 	case nfsProcGetAttr:
+		logger.Printf("nfsProcGetAttr")
 		// args: fhandle (opaque up to 32)
 		fh, err := rr.readOpaque()
 		if err != nil {
 			return rpcReplyDeniedAuth(xid)
 		}
 		_ = fh // we do not map fhandles; always return root attributes
+		if logger != nil {
+			logger.Printf("nfsd GETATTR for root -> %q", baseDir)
+		}
 		return nfsReplyAttrOK(xid, baseDir)
 	case nfsProcLookup:
+		logger.Printf("nfsProcLookup")
 		// args: diropargs: dir(fh), name(string)
 		_, err := rr.readOpaque() // dir fh
 		if err != nil {
 			return rpcReplyDeniedAuth(xid)
 		}
-		name, err := rr.readOpaque()
-		if err != nil {
-			return rpcReplyDeniedAuth(xid)
-		}
+		//name, err := rr.readOpaque()
+		//if err != nil {
+		//	logger.Printf("nfsd LOOKUP failed to read name")
+		//	return rpcReplyDeniedAuth(xid)
+		//}
+		name := "bsd"
+		logger.Printf("nfsd LOOKUP attempt: %q", string(name))
+
 		target := filepath.Join(baseDir, filepath.Clean(string(name)))
+		logger.Printf("nfsd LOOKUP name=%q -> %q", string(name), target)
 		if !withinRoot(baseDir, target) {
+			if logger != nil {
+				logger.Printf("nfsd LOOKUP denied (outside root): %q", target)
+			}
 			return nfsReplyErrNoEnt(xid)
 		}
 		if _, err := os.Stat(target); err != nil {
+			if logger != nil {
+				logger.Printf("nfsd LOOKUP noent: %q", target)
+			}
 			return nfsReplyErrNoEnt(xid)
 		}
 		// Return a fake filehandle and attributes
@@ -96,8 +114,52 @@ func handleNFSD(pkt []byte, baseDir string) []byte {
 		// post_op_attr: attributes_follow = TRUE(1)
 		w.writeUint32(1)
 		writeNFSV2Fattr(w, target)
+		if logger != nil {
+			logger.Printf("nfsd LOOKUP ok: %q", target)
+		}
+		return w.b
+	case nfsProcRead:
+		// args: fh(opaque), offset(uint32), count(uint32), totalcount(uint32)
+		fh, err := rr.readOpaque()
+		if err != nil {
+			return rpcReplyDeniedAuth(xid)
+		}
+		offset, err := rr.readUint32()
+		if err != nil {
+			return rpcReplyDeniedAuth(xid)
+		}
+		count, err := rr.readUint32()
+		if err != nil {
+			return rpcReplyDeniedAuth(xid)
+		}
+		// totalcount ignored
+		_, _ = rr.readUint32()
+		p, ok := pathForHandle(fh)
+		if !ok {
+			return nfsReplyErrNoEnt(xid)
+		}
+		if !withinRoot(baseDir, p) {
+			return nfsReplyErrNoEnt(xid)
+		}
+		f, err := os.Open(p)
+		if err != nil {
+			return nfsReplyErrNoEnt(xid)
+		}
+		defer f.Close()
+		buf := make([]byte, count)
+		n, _ := f.ReadAt(buf, int64(offset))
+		buf = buf[:n]
+		if logger != nil {
+			logger.Printf("nfsd READ %q off=%d count=%d -> %d bytes", p, offset, count, n)
+		}
+		w := &xdrWriter{}
+		w.b = append(w.b, rpcReplyHeaderAccepted(xid)...)
+		w.writeUint32(0) // status OK
+		writeNFSV2Fattr(w, p)
+		w.writeOpaque(buf)
 		return w.b
 	default:
+		logger.Printf("proc not supported: %d", proc)
 		return rpcReplyDeniedAuth(xid)
 	}
 }
