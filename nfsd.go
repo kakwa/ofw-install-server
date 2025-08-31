@@ -67,29 +67,27 @@ func handleNFSD(pkt []byte, baseDir string, logger *log.Logger) []byte {
 		return rpcReplyHeaderAccepted(xid)
 	case nfsProcGetAttr:
 		logger.Printf("nfsProcGetAttr")
-		// args: fhandle (opaque up to 32)
-		fh, err := rr.readOpaque()
+		// args: fhandle (fixed 32 bytes)
+		_, err := rr.readFixed(32)
 		if err != nil {
 			return rpcReplyDeniedAuth(xid)
 		}
-		_ = fh // we do not map fhandles; always return root attributes
 		if logger != nil {
 			logger.Printf("nfsd GETATTR for root -> %q", baseDir)
 		}
 		return nfsReplyAttrOK(xid, baseDir)
 	case nfsProcLookup:
 		logger.Printf("nfsProcLookup")
-		// args: diropargs: dir(fh), name(string)
-		_, err := rr.readOpaque() // dir fh
+		// args: diropargs: dir(fh fixed32), name(string)
+		_, err := rr.readFixed(32) // dir fh
 		if err != nil {
 			return rpcReplyDeniedAuth(xid)
 		}
-		//name, err := rr.readOpaque()
-		//if err != nil {
-		//	logger.Printf("nfsd LOOKUP failed to read name")
-		//	return rpcReplyDeniedAuth(xid)
-		//}
-		name := "bsd"
+		name, err := rr.readOpaque()
+		if err != nil {
+			logger.Printf("nfsd LOOKUP failed to read name")
+			return rpcReplyDeniedAuth(xid)
+		}
 		logger.Printf("nfsd LOOKUP attempt: %q", string(name))
 
 		target := filepath.Join(baseDir, filepath.Clean(string(name)))
@@ -106,41 +104,47 @@ func handleNFSD(pkt []byte, baseDir string, logger *log.Logger) []byte {
 			}
 			return nfsReplyErrNoEnt(xid)
 		}
-		// Return a fake filehandle and attributes
+		// Return a filehandle and attributes
 		w := &xdrWriter{}
 		w.b = append(w.b, rpcReplyHeaderAccepted(xid)...)
-		w.writeUint32(0)                // status OK
-		w.writeOpaque(make([]byte, 32)) // object fh
-		// post_op_attr: attributes_follow = TRUE(1)
-		w.writeUint32(1)
+		w.writeUint32(0)                          // status OK
+		w.writeFixedOpaque(handleForPath(target)) // object fh (fixed 32)
+		// For v2 diropres: next is attributes; we omit any boolean and serialize fattr
 		writeNFSV2Fattr(w, target)
 		if logger != nil {
-			logger.Printf("nfsd LOOKUP ok: %q", target)
+			logger.Printf("nfsd LOOKUP ok: %q (fh stored)", target)
 		}
 		return w.b
 	case nfsProcRead:
-		// args: fh(opaque), offset(uint32), count(uint32), totalcount(uint32)
-		fh, err := rr.readOpaque()
+		logger.Printf("nfsProcRead")
+		// args: fh(fixed32), offset(uint32), count(uint32), totalcount(uint32)
+		_, err := rr.readFixed(32)
+		//fh, err := rr.readFixed(32)
 		if err != nil {
+			logger.Printf("file handle (fh) recovery failed")
 			return rpcReplyDeniedAuth(xid)
 		}
 		offset, err := rr.readUint32()
 		if err != nil {
+			logger.Printf("offset recovery failed")
 			return rpcReplyDeniedAuth(xid)
 		}
 		count, err := rr.readUint32()
 		if err != nil {
+			logger.Printf("count recovery failed")
 			return rpcReplyDeniedAuth(xid)
 		}
 		// totalcount ignored
 		_, _ = rr.readUint32()
-		p, ok := pathForHandle(fh)
-		if !ok {
-			return nfsReplyErrNoEnt(xid)
-		}
-		if !withinRoot(baseDir, p) {
-			return nfsReplyErrNoEnt(xid)
-		}
+		//p, ok := pathForHandle(fh)
+		//if !ok {
+		//	logger.Printf("path/p recovery failed")
+		//	return nfsReplyErrNoEnt(xid)
+		//}
+		//if !withinRoot(baseDir, p) {
+		//	return nfsReplyErrNoEnt(xid)
+		//}
+		p := "bsd"
 		f, err := os.Open(p)
 		if err != nil {
 			return nfsReplyErrNoEnt(xid)
@@ -156,7 +160,7 @@ func handleNFSD(pkt []byte, baseDir string, logger *log.Logger) []byte {
 		w.b = append(w.b, rpcReplyHeaderAccepted(xid)...)
 		w.writeUint32(0) // status OK
 		writeNFSV2Fattr(w, p)
-		w.writeOpaque(buf)
+		w.writeOpaque(buf) // data as counted opaque
 		return w.b
 	default:
 		logger.Printf("proc not supported: %d", proc)

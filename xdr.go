@@ -12,17 +12,17 @@ type xdrReader struct {
 }
 
 func (r *xdrReader) readFixed(n int) ([]byte, error) {
-    if len(r.b) < r.o+n {
-        return nil, io.ErrUnexpectedEOF
-    }
-    data := r.b[r.o : r.o+n]
-    r.o += n
-    pad := (4 - (n & 3)) & 3
-    if len(r.b) < r.o+pad {
-        return nil, io.ErrUnexpectedEOF
-    }
-    r.o += pad
-    return data, nil
+	if len(r.b) < r.o+n {
+		return nil, io.ErrUnexpectedEOF
+	}
+	data := r.b[r.o : r.o+n]
+	r.o += n
+	pad := (4 - (n & 3)) & 3
+	if len(r.b) < r.o+pad {
+		return nil, io.ErrUnexpectedEOF
+	}
+	r.o += pad
+	return data, nil
 }
 
 func (r *xdrReader) readUint32() (uint32, error) {
@@ -89,11 +89,11 @@ func (w *xdrWriter) writeOpaque(p []byte) {
 }
 
 func (w *xdrWriter) writeFixedOpaque(p []byte) {
-    w.b = append(w.b, p...)
-    pad := (4 - (len(p) & 3)) & 3
-    if pad > 0 {
-        w.b = append(w.b, make([]byte, pad)...)
-    }
+	w.b = append(w.b, p...)
+	pad := (4 - (len(p) & 3)) & 3
+	if pad > 0 {
+		w.b = append(w.b, make([]byte, pad)...)
+	}
 }
 
 func parseRPCCall(b []byte) (xid, prog, vers, proc uint32, rr xdrReader, err error) {
@@ -152,4 +152,3 @@ func rpcReplyDeniedAuth(xid uint32) []byte {
 	w.writeUint32(1)
 	return w.b
 }
-
