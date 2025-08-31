@@ -42,7 +42,7 @@ func StartMountd(addr string, baseDir string, logger *log.Logger) (net.PacketCon
 				}
 				return
 			}
-			resp := handleMountd(buf[:n], baseDir)
+			resp := handleMountd(buf[:n], baseDir, logger)
 			if resp != nil {
 				_, _ = pc.WriteTo(resp, raddr)
 			}
@@ -51,7 +51,7 @@ func StartMountd(addr string, baseDir string, logger *log.Logger) (net.PacketCon
 	return pc, nil
 }
 
-func handleMountd(pkt []byte, baseDir string) []byte {
+func handleMountd(pkt []byte, baseDir string, logger *log.Logger) []byte {
 	xid, prog, vers, proc, rr, err := parseRPCCall(pkt)
 	if err != nil {
 		return nil
@@ -71,11 +71,17 @@ func handleMountd(pkt []byte, baseDir string) []byte {
 		// Clean path and ensure inside baseDir
 		clean := filepath.Clean(string(path))
 		full := filepath.Join(baseDir, clean)
+		if logger != nil {
+			logger.Printf("mountd MNT request path=%q full=%q", clean, full)
+		}
 		if !withinRoot(baseDir, full) {
 			// return status error (NFSERR_PERM = 1). For v1, fhandle length 32 opaque on success.
 			w := &xdrWriter{}
 			w.b = append(w.b, rpcReplyHeaderAccepted(xid)...)
 			w.writeUint32(1) // status error
+			if logger != nil {
+				logger.Printf("mountd deny (outside root) path=%q", full)
+			}
 			return w.b
 		}
 		// ensure exists
@@ -83,15 +89,24 @@ func handleMountd(pkt []byte, baseDir string) []byte {
 			w := &xdrWriter{}
 			w.b = append(w.b, rpcReplyHeaderAccepted(xid)...)
 			w.writeUint32(2) // NFSERR_NOENT simplistic
+			if logger != nil {
+				logger.Printf("mountd deny (no such dir) path=%q", full)
+			}
 			return w.b
 		}
-		// success: status=0 and a 32-byte fake file handle (all zeros)
+		// success: status=0 and a 32-byte file handle derived from path
 		w := &xdrWriter{}
 		w.b = append(w.b, rpcReplyHeaderAccepted(xid)...)
 		w.writeUint32(0) // status OK
-		w.writeOpaque(make([]byte, 32))
+		w.writeOpaque(handleForPath(full))
+		if logger != nil {
+			logger.Printf("mountd MNT ok path=%q", full)
+		}
 		return w.b
 	case mountProcUmnt:
+		if logger != nil {
+			logger.Printf("mountd UMNT request")
+		}
 		w := &xdrWriter{}
 		w.b = append(w.b, rpcReplyHeaderAccepted(xid)...)
 		w.writeUint32(0)
