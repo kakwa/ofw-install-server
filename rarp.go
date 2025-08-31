@@ -148,15 +148,15 @@ func parseIncomingRarp(b []byte) (EthHdr, RarpPacket, error) {
 	return eth, pkt, nil
 }
 
-func StartRARPServer(iface *string, logger *log.Logger) (string, error) {
+func StartRARPServer(iface *string, logger *log.Logger) (*IPv4Allocator, net.IP, error) {
 	ifc, err := ifaceByName(*iface)
 	if err != nil {
-		return "", err
+		return nil, nil, err
 	}
 
 	serverIP, err := firstIPv4Addr(*iface)
 	if err != nil {
-		return "", err
+		return nil, nil, err
 	}
 
 	// Optional allocator
@@ -165,11 +165,11 @@ func StartRARPServer(iface *string, logger *log.Logger) (string, error) {
 	// Derive CIDR using netutil helper
 	cidr, err := cidrFromInterface(ifc, serverIP)
 	if err != nil {
-		return "", fmt.Errorf("cidr: %w", err)
+		return nil, nil, fmt.Errorf("cidr: %w", err)
 	}
 	a, err := NewIPv4AllocatorFromCIDR(cidr)
 	if err != nil {
-		return "", fmt.Errorf("allocator: %w", err)
+		return nil, nil, fmt.Errorf("allocator: %w", err)
 	}
 	// Reserve server IP and all statically mapped IPs
 	a.ReserveIP(serverIP)
@@ -257,5 +257,5 @@ func StartRARPServer(iface *string, logger *log.Logger) (string, error) {
 		}
 	}()
 
-	return ifc.Name, nil
+	return allocator, serverIP, nil
 }

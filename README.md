@@ -26,10 +26,15 @@ export BOOT_SERVER_IP=172.24.42.150
 export BOOT_SERVER_NIC=enp0s25
 sudo ip addr add ${BOOT_SERVER_IP}/24 dev ${BOOT_SERVER_NIC}
 
-sudo ./ofw-install-server -tftpdefault boot.img -i ${BOOT_SERVER_NIC}
+sudo ./ofw-install-server -iface ${BOOT_SERVER_NIC} -tftproot /srv/tftp -tftpdefault boot.img \
+  -bootp -bootp-rootpath "/tftp:/netbsd-INSTALL.gz" -bootp-filename "/tftp:/netbsd-INSTALL.gz"
 ```
 
 Options:
 
-- `-i`: interface name to be used
+- `-iface`: interface name to be used
+- `-tftproot`: TFTP root directory to serve files from (default: `.`)
 - `-tftpdefault`: default file served in case we have the `IP in Hexa` file request typical of Open Firmware.
+- `-bootp`: enable the built-in BOOTP/DHCP server (authoritative behavior)
+- `-bootp-rootpath`: BOOTP root-path option value (optional)
+- `-bootp-filename`: BOOTP filename/bootfile (optional)

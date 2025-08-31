@@ -9,9 +9,13 @@ import (
 )
 
 func main() {
-	iface := flag.String("i", "enp0s25", "interface to bind (Linux only)")
+	iface := flag.String("iface", "enp0s25", "interface to bind")
 	tftpRoot := flag.String("tftproot", ".", "TFTP root directory")
 	tftpDefault := flag.String("tftpdefault", "", "Default image to serve for IP-hex filenames")
+	// BOOTP flags
+	bootpEnable := flag.Bool("bootp", false, "Enable built-in BOOTP/DHCP server")
+	bootpRootPath := flag.String("bootp-rootpath", "", "Root-path option (optional)")
+	bootpFilename := flag.String("bootp-filename", "", "Filename/bootfile option (optional)")
 	flag.Parse()
 
 	// Start TFTP server
@@ -23,12 +27,23 @@ func main() {
 	}
 
 	loggerRARP := log.New(os.Stdout, "rarp ", log.LstdFlags)
-	_, err = StartRARPServer(iface, loggerRARP)
+	allocator, serverIP, err := StartRARPServer(iface, loggerRARP)
 
 	if err != nil {
 		log.Fatalf("start arp failure: %v", err)
 	}
 	loggerRARP.Printf("RARP server enabled on %s", *iface)
+
+	// Start BOOTP server if enabled
+	if *bootpEnable {
+		loggerBOOTP := log.New(os.Stdout, "bootp ", log.LstdFlags)
+		// Defaults for router and next-server are the serverIP
+		_, err = StartBOOTPServer(*iface, ":67", allocator, serverIP, *bootpRootPath, *bootpFilename, loggerBOOTP)
+		if err != nil {
+			log.Fatalf("start bootp failure: %v", err)
+		}
+		loggerBOOTP.Printf("BOOTP server enabled on %s with pool %s-%s", *iface, allocator.start, allocator.end)
+	}
 
 	// Block until termination signal to keep goroutine servers alive
 	stop := make(chan os.Signal, 1)
