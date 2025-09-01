@@ -21,6 +21,9 @@ func main() {
 	// NFS/portmap flags
 	nfsEnable := flag.Bool("nfs", false, "enable minimal NFSv2 Server")
 	nfsFile := flag.String("nfs-file", "", "file to server using NFSv2 (step 2)")
+	// HTTP flags
+	httpEnable := flag.Bool("http", false, "Enable built-in HTTP server")
+	httpFile := flag.String("http-file", "", "file to serve for all HTTP requests")
 
 	flag.Parse()
 
@@ -33,6 +36,22 @@ func main() {
 			log.Fatalf("start tftp failure: %v", err)
 		}
 	}
+
+	// Start HTTP server if enabled
+	if *httpEnable {
+		if *httpFile == "" {
+			log.Fatalf("http enabled but no --http-file provided")
+		}
+		loggerHTTP := log.New(os.Stdout, "http ", log.LstdFlags)
+		_, err := StartHTTPServer(":80", *httpFile, loggerHTTP)
+		if err != nil {
+			log.Fatalf("start http failure: %v", err)
+		}
+	}
+
+	// Start RARP allocator and discover server IP early (used by other services)
+	loggerRARP := log.New(os.Stdout, "rarp ", log.LstdFlags)
+	allocator, serverIP, err := StartRARPServer(iface, loggerRARP)
 
 	// Optionally start minimal portmap and UDP proxies for mountd/nfs
 	if *nfsEnable {
@@ -53,9 +72,6 @@ func main() {
 		}
 		loggerPM.Printf("MOUNT/NFS/portmap enabled")
 	}
-
-	loggerRARP := log.New(os.Stdout, "rarp ", log.LstdFlags)
-	allocator, serverIP, err := StartRARPServer(iface, loggerRARP)
 
 	// Start BOOTP server if enabled
 	if *bootpEnable {
