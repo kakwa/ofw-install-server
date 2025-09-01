@@ -92,8 +92,9 @@ func (h *dhcpHandler) ServeDHCP(pkt dhcp4.Packet, msgType dhcp4.MessageType, opt
 
 func (h *dhcpHandler) reply(pkt dhcp4.Packet, mt dhcp4.MessageType, yiaddr net.IP, req dhcp4.Options) dhcp4.Packet {
 	base := dhcp4.Options{
-		dhcp4.OptionSubnetMask: []byte(h.allocator.netw.Mask),
-		//dhcp4.OptionRootPath:               []byte(h.routerIP.To4()),
+		dhcp4.OptionSubnetMask:       []byte(h.allocator.netw.Mask),
+		dhcp4.OptionDomainNameServer: []byte{9, 9, 9, 9}, // hardcoded quad 9 DNS server
+		dhcp4.OptionRootPath:         []byte(h.routerIP.To4()),
 		dhcp4.OptionRouter:           []byte(h.routerIP.To4()),
 		dhcp4.OptionServerIdentifier: []byte(h.serverIP.To4()),
 		// Also advertise TFTP server IP as a name string (option 66)
