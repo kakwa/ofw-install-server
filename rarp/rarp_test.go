@@ -1,4 +1,4 @@
-package main
+package rarp
 
 import (
 	"encoding/binary"
@@ -24,33 +24,30 @@ func TestHtons(t *testing.T) {
 }
 
 func TestParseIncomingRarp(t *testing.T) {
-	// Craft minimal RARP request frame
 	serverMAC := net.HardwareAddr{0x00, 0x11, 0x22, 0x33, 0x44, 0x55}
 	clientMAC := net.HardwareAddr{0xde, 0xad, 0xbe, 0xef, 0x00, 0x01}
 	buf := make([]byte, 14+28)
-	// Ethernet header
 	copy(buf[0:6], serverMAC[:])
 	copy(buf[6:12], clientMAC[:])
 	binary.BigEndian.PutUint16(buf[12:14], ETH_P_RARP)
-	// RARP payload
 	o := 14
-	binary.BigEndian.PutUint16(buf[o:o+2], 1) // HType Ethernet
+	binary.BigEndian.PutUint16(buf[o:o+2], 1)
 	o += 2
-	binary.BigEndian.PutUint16(buf[o:o+2], ETH_P_IP) // PType IPv4
+	binary.BigEndian.PutUint16(buf[o:o+2], ETH_P_IP)
 	o += 2
-	buf[o] = 6 // HLEN
+	buf[o] = 6
 	o++
-	buf[o] = 4 // PLEN
+	buf[o] = 4
 	o++
-	binary.BigEndian.PutUint16(buf[o:o+2], RARP_REQUEST) // Oper
+	binary.BigEndian.PutUint16(buf[o:o+2], RARP_REQUEST)
 	o += 2
-	copy(buf[o:o+6], clientMAC[:]) // SHA (sender MAC)
+	copy(buf[o:o+6], clientMAC[:])
 	o += 6
-	copy(buf[o:o+4], []byte{0, 0, 0, 0}) // SPA
+	copy(buf[o:o+4], []byte{0, 0, 0, 0})
 	o += 4
-	copy(buf[o:o+6], clientMAC[:]) // THA (target is self for whoami)
+	copy(buf[o:o+6], clientMAC[:])
 	o += 6
-	copy(buf[o:o+4], []byte{0, 0, 0, 0}) // TPA
+	copy(buf[o:o+4], []byte{0, 0, 0, 0})
 
 	eth, pkt, err := parseIncomingRarp(buf)
 	if err != nil {

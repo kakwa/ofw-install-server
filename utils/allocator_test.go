@@ -1,4 +1,4 @@
-package main
+package utils
 
 import (
 	"net"
@@ -10,14 +10,13 @@ func TestNewIPv4AllocatorFromCIDRAndAllocate(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewIPv4AllocatorFromCIDR error: %v", err)
 	}
-	if got, want := alloc.start.String(), "192.168.10.1"; got != want {
+	if got, want := alloc.RangeStart().String(), "192.168.10.1"; got != want {
 		t.Fatalf("start=%s want=%s", got, want)
 	}
-	if got, want := alloc.end.String(), "192.168.10.254"; got != want {
+	if got, want := alloc.RangeEnd().String(), "192.168.10.254"; got != want {
 		t.Fatalf("end=%s want=%s", got, want)
 	}
 
-	// Reserve first usable, then ensure allocation skips it.
 	alloc.ReserveIP(net.ParseIP("192.168.10.1"))
 
 	var macA [6]byte = [6]byte{0x00, 0x11, 0x22, 0x33, 0x44, 0x55}
@@ -30,12 +29,10 @@ func TestNewIPv4AllocatorFromCIDRAndAllocate(t *testing.T) {
 	if got, want := net.IP(ipA[:]).String(), "192.168.10.2"; got != want {
 		t.Fatalf("macA ip=%s want=%s", got, want)
 	}
-	// Stable mapping for same MAC
 	ipA2, ok := alloc.AllocateForMAC(macA)
 	if !ok || ipA2 != ipA {
 		t.Fatalf("expected stable lease for macA")
 	}
-	// Next MAC gets next IP
 	ipB, ok := alloc.AllocateForMAC(macB)
 	if !ok {
 		t.Fatalf("allocation failed for macB")

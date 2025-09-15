@@ -1,4 +1,4 @@
-package main
+package utils
 
 import (
 	"log"
@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-func indexOf(s string, c byte) int {
+func IndexOf(s string, c byte) int {
 	for i := 0; i < len(s); i++ {
 		if s[i] == c {
 			return i
@@ -16,11 +16,9 @@ func indexOf(s string, c byte) int {
 	return -1
 }
 
-func mustPort(addr string) int {
-	// addr can be ":2049" or "0.0.0.0:2049"
+func MustPort(addr string) int {
 	_, p, err := net.SplitHostPort(addr)
 	if err != nil {
-		// try when only ":NNN" present
 		if strings.HasPrefix(addr, ":") {
 			v, _ := strconv.Atoi(addr[1:])
 			return v

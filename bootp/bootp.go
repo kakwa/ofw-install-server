@@ -1,4 +1,4 @@
-package main
+package bootp
 
 import (
 	"errors"
@@ -9,6 +9,8 @@ import (
 
 	dhcp4 "github.com/krolaw/dhcp4"
 	"github.com/krolaw/dhcp4/conn"
+
+	"ofw-install-server/utils"
 )
 
 // StartBOOTPServer runs a minimal BOOTP/DHCP server that shares the allocator
@@ -17,7 +19,7 @@ import (
 // - Listens on addr (typically ":67").
 // - Uses allocator's pool; router and next-server default to serverIP if nil.
 // - Optionally sets root-path and filename if provided (non-empty).
-func StartBOOTPServer(ifaceName, addr string, allocator *IPv4Allocator, serverIP net.IP, rootPath string, bootFilename string, logger *log.Logger) (net.PacketConn, error) {
+func StartBOOTPServer(ifaceName, addr string, allocator *utils.IPv4Allocator, serverIP net.IP, rootPath string, bootFilename string, logger *log.Logger) (net.PacketConn, error) {
 	if allocator == nil || serverIP == nil {
 		return nil, errors.New("invalid BOOTP config: missing allocator or serverIP")
 	}
@@ -41,7 +43,7 @@ func StartBOOTPServer(ifaceName, addr string, allocator *IPv4Allocator, serverIP
 	}
 	go func() {
 		if logger != nil {
-			logger.Printf("BOOTP server listening on %s, range=%s-%s router=%s next-server=%s filename=%q root-path=%q", addr, allocator.start, allocator.end, serverIP, serverIP, bootFilename, rootPath)
+			logger.Printf("BOOTP server listening on %s, range=%s-%s router=%s next-server=%s filename=%q root-path=%q", addr, allocator.RangeStart(), allocator.RangeEnd(), serverIP, serverIP, bootFilename, rootPath)
 		}
 		if serveErr := dhcp4.Serve(s, h); serveErr != nil {
 			if logger != nil {
@@ -54,7 +56,7 @@ func StartBOOTPServer(ifaceName, addr string, allocator *IPv4Allocator, serverIP
 
 type dhcpHandler struct {
 	leaseDuration time.Duration
-	allocator     *IPv4Allocator
+	allocator     *utils.IPv4Allocator
 	serverIP      net.IP // used as Server Identifier option
 	nextServerIP  net.IP // used as siaddr (next-server)
 	routerIP      net.IP
@@ -92,7 +94,7 @@ func (h *dhcpHandler) ServeDHCP(pkt dhcp4.Packet, msgType dhcp4.MessageType, opt
 
 func (h *dhcpHandler) reply(pkt dhcp4.Packet, mt dhcp4.MessageType, yiaddr net.IP, req dhcp4.Options) dhcp4.Packet {
 	base := dhcp4.Options{
-		dhcp4.OptionSubnetMask:       []byte(h.allocator.netw.Mask),
+		dhcp4.OptionSubnetMask:       []byte(h.allocator.Subnet().Mask),
 		dhcp4.OptionDomainNameServer: []byte{9, 9, 9, 9}, // hardcoded quad 9 DNS server
 		dhcp4.OptionRootPath:         []byte(h.routerIP.To4()),
 		dhcp4.OptionRouter:           []byte(h.routerIP.To4()),

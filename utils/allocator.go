@@ -1,4 +1,4 @@
-package main
+package utils
 
 import (
 	"fmt"
@@ -47,7 +47,6 @@ func NewIPv4AllocatorFromCIDR(cidr string) (*IPv4Allocator, error) {
 	}, nil
 }
 
-// ReserveIP marks an IP address as used and unavailable for dynamic assignment.
 func (a *IPv4Allocator) ReserveIP(ip net.IP) {
 	if ip == nil {
 		return
@@ -57,8 +56,6 @@ func (a *IPv4Allocator) ReserveIP(ip net.IP) {
 	}
 }
 
-// AllocateForMAC returns a stable IP for the given MAC. If the MAC already has
-// a lease, the same IP is returned. Otherwise the next free IP in the pool is assigned.
 func (a *IPv4Allocator) AllocateForMAC(mac [6]byte) (out [4]byte, ok bool) {
 	if ip, exists := a.leases[mac]; exists {
 		return ip, true
@@ -76,6 +73,10 @@ func (a *IPv4Allocator) AllocateForMAC(mac [6]byte) (out [4]byte, ok bool) {
 	}
 	return out, false
 }
+
+func (a *IPv4Allocator) Subnet() *net.IPNet { return a.netw }
+func (a *IPv4Allocator) RangeStart() net.IP { return a.start }
+func (a *IPv4Allocator) RangeEnd() net.IP   { return a.end }
 
 func incrementIPv4(ip net.IP) {
 	for i := 3; i >= 0; i-- {

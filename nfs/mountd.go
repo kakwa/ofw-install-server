@@ -1,4 +1,4 @@
-package main
+package nfs
 
 import (
 	"log"

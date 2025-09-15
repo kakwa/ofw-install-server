@@ -1,4 +1,4 @@
-package main
+package utils
 
 import (
 	"errors"
@@ -6,7 +6,7 @@ import (
 	"net"
 )
 
-func ifaceByName(name string) (*net.Interface, error) {
+func IfaceByName(name string) (*net.Interface, error) {
 	ifc, err := net.InterfaceByName(name)
 	if err != nil {
 		return nil, err
@@ -20,7 +20,7 @@ func ifaceByName(name string) (*net.Interface, error) {
 	return ifc, nil
 }
 
-func firstIPv4Addr(name string) (net.IP, error) {
+func FirstIPv4Addr(name string) (net.IP, error) {
 	ifc, err := net.InterfaceByName(name)
 	if err != nil {
 		return nil, err
@@ -41,10 +41,7 @@ func firstIPv4Addr(name string) (net.IP, error) {
 	return nil, errors.New("no IPv4 on interface")
 }
 
-// cidrFromInterface computes the CIDR string (e.g., 192.168.1.10/24) for the
-// given interface and server IPv4 address. It prefers the IPNet whose IP equals
-// serverIP, and falls back to the first IPv4 IPNet on the interface.
-func cidrFromInterface(ifc *net.Interface, serverIP net.IP) (string, error) {
+func CIDRFromInterface(ifc *net.Interface, serverIP net.IP) (string, error) {
 	addrs, err := ifc.Addrs()
 	if err != nil {
 		return "", err

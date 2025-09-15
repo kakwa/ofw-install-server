@@ -6,6 +6,12 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+
+	"ofw-install-server/bootp"
+	httpx "ofw-install-server/http"
+	"ofw-install-server/nfs"
+	"ofw-install-server/rarp"
+	"ofw-install-server/tftp"
 )
 
 func main() {
@@ -30,7 +36,7 @@ func main() {
 	// Start TFTP server
 	if *tftpEnable {
 		loggerTFTP := log.New(os.Stdout, "tftp ", log.LstdFlags)
-		_, err := StartTFTPServer(":69", *tftpFile, loggerTFTP)
+		_, err := tftp.StartTFTPServer(":69", *tftpFile, loggerTFTP)
 
 		if err != nil {
 			log.Fatalf("start tftp failure: %v", err)
@@ -43,7 +49,7 @@ func main() {
 			log.Fatalf("http enabled but no --http-file provided")
 		}
 		loggerHTTP := log.New(os.Stdout, "http ", log.LstdFlags)
-		_, err := StartHTTPServer(":80", *httpFile, loggerHTTP)
+		_, err := httpx.StartHTTPServer(":80", *httpFile, loggerHTTP)
 		if err != nil {
 			log.Fatalf("start http failure: %v", err)
 		}
@@ -51,22 +57,22 @@ func main() {
 
 	// Start RARP allocator and discover server IP early (used by other services)
 	loggerRARP := log.New(os.Stdout, "rarp ", log.LstdFlags)
-	allocator, serverIP, err := StartRARPServer(iface, loggerRARP)
+	allocator, serverIP, err := rarp.StartRARPServer(iface, loggerRARP)
 
 	// Optionally start minimal portmap and UDP proxies for mountd/nfs
 	if *nfsEnable {
 		loggerPM := log.New(os.Stdout, "rpc ", log.LstdFlags)
 		// Start local MOUNT and NFS servers serving from TFTP root by default
-		_, err := StartMountd(":20048", "/", loggerPM)
+		_, err := nfs.StartMountd(":20048", "/", loggerPM)
 		if err != nil {
 			log.Fatalf("start mountd failure: %v", err)
 		}
-		_, err = StartNFSD(":2049", *nfsFile, loggerPM)
+		_, err = nfs.StartNFSD(":2049", *nfsFile, loggerPM)
 		if err != nil {
 			log.Fatalf("start nfsd failure: %v", err)
 		}
 		// Start local portmap that answers GETPORT for our services
-		_, err = StartPortmapServer(":111", 20048, 2049, 0, loggerPM)
+		_, err = nfs.StartPortmapServer(":111", 20048, 2049, 0, loggerPM)
 		if err != nil {
 			log.Fatalf("start portmap failure: %v", err)
 		}
@@ -77,15 +83,14 @@ func main() {
 	if *bootpEnable {
 		loggerBOOTP := log.New(os.Stdout, "bootp ", log.LstdFlags)
 		// Defaults for router and next-server are the serverIP
-		_, err = StartBOOTPServer(*iface, ":67", allocator, serverIP, *bootpRootPath, *bootpFilename, loggerBOOTP)
+		_, err = bootp.StartBOOTPServer(*iface, ":67", allocator, serverIP, *bootpRootPath, *bootpFilename, loggerBOOTP)
 		if err != nil {
 			log.Fatalf("start bootp failure: %v", err)
 		}
-		loggerBOOTP.Printf("BOOTP server enabled on %s with pool %s-%s", *iface, allocator.start, allocator.end)
+		loggerBOOTP.Printf("BOOTP server enabled on %s", *iface)
 	}
 
 	if *rarpEnable {
-		// Start RARP server
 		if err != nil {
 			log.Fatalf("start arp failure: %v", err)
 		}

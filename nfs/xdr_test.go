@@ -1,4 +1,4 @@
-package main
+package nfs
 
 import (
 	"encoding/binary"
@@ -6,7 +6,6 @@ import (
 )
 
 func buildMinimalRPCCall(xid, prog, vers, proc uint32) []byte {
-	// xid, mtype=CALL(0), rpcvers=2, prog, vers, proc, cred(AUTH_NONE,0), verf(AUTH_NONE,0)
 	b := make([]byte, 0, 40)
 	hdr := make([]byte, 24)
 	binary.BigEndian.PutUint32(hdr[0:4], xid)

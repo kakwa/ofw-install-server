@@ -1,4 +1,4 @@
-package main
+package rarp
 
 import (
 	"bufio"
@@ -9,6 +9,8 @@ import (
 	"os"
 
 	"golang.org/x/sys/unix"
+
+	"ofw-install-server/utils"
 )
 
 // EtherType values
@@ -148,26 +150,26 @@ func parseIncomingRarp(b []byte) (EthHdr, RarpPacket, error) {
 	return eth, pkt, nil
 }
 
-func StartRARPServer(iface *string, logger *log.Logger) (*IPv4Allocator, net.IP, error) {
-	ifc, err := ifaceByName(*iface)
+func StartRARPServer(iface *string, logger *log.Logger) (*utils.IPv4Allocator, net.IP, error) {
+	ifc, err := utils.IfaceByName(*iface)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	serverIP, err := firstIPv4Addr(*iface)
+	serverIP, err := utils.FirstIPv4Addr(*iface)
 	if err != nil {
 		return nil, nil, err
 	}
 
 	// Optional allocator
-	var allocator *IPv4Allocator
+	var allocator *utils.IPv4Allocator
 
 	// Derive CIDR using netutil helper
-	cidr, err := cidrFromInterface(ifc, serverIP)
+	cidr, err := utils.CIDRFromInterface(ifc, serverIP)
 	if err != nil {
 		return nil, nil, fmt.Errorf("cidr: %w", err)
 	}
-	a, err := NewIPv4AllocatorFromCIDR(cidr)
+	a, err := utils.NewIPv4AllocatorFromCIDR(cidr)
 	if err != nil {
 		return nil, nil, fmt.Errorf("allocator: %w", err)
 	}
