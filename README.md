@@ -12,7 +12,7 @@ It implements a minimal RARP server and a TFTP server that also handles the "IP 
 
 Optional BOOTP, NFSv2 and HTTP helpers are included to also simplify end-to-end OpenBSD & NetBSD installs.
 
-It's meant to be a simpler option than the [traditional setup](https://github.com/kakwa/ofw-install-server/blob/main/MANUAL_SETUP.md).
+It's meant to be a simpler option than the [traditional setup](https://github.com/kakwa/ofw-install-server/blob/main/MANUAL_SETUP.md), but at the cost of flexibility (single install path/set of files).
 
 ## Build
 
