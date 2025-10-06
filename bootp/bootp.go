@@ -16,10 +16,12 @@ import (
 // StartBOOTPServer runs a minimal BOOTP/DHCP server that shares the allocator
 // with the RARP server so the same MAC gets the same IP.
 //
-// - Listens on addr (typically ":67").
-// - Uses allocator's pool; router and next-server default to serverIP if nil.
-// - Optionally sets root-path and filename if provided (non-empty).
-func StartBOOTPServer(ifaceName, addr string, allocator *utils.IPv4Allocator, serverIP net.IP, rootPath string, bootFilename string, logger *log.Logger) (net.PacketConn, error) {
+//   - Listens on addr (typically ":67").
+//   - Uses allocator's pool; router and next-server default to serverIP if nil.
+//   - Optionally sets root-path and filename if provided (non-empty).
+//   - Uses provided dnsServers (IPv4) for OptionDomainNameServer if non-empty.
+//     If empty, defaults to 9.9.9.9.
+func StartBOOTPServer(ifaceName, addr string, allocator *utils.IPv4Allocator, serverIP net.IP, rootPath string, bootFilename string, dnsServers []net.IP, logger *log.Logger) (net.PacketConn, error) {
 	if allocator == nil || serverIP == nil {
 		return nil, errors.New("invalid BOOTP config: missing allocator or serverIP")
 	}
@@ -32,6 +34,7 @@ func StartBOOTPServer(ifaceName, addr string, allocator *utils.IPv4Allocator, se
 		routerIP:      serverIP.To4(),
 		rootPath:      rootPath,
 		bootFilename:  bootFilename,
+		dnsServers:    dnsServers,
 		leases:        make(map[string]net.IP),
 	}
 
@@ -62,6 +65,7 @@ type dhcpHandler struct {
 	routerIP      net.IP
 	rootPath      string
 	bootFilename  string
+	dnsServers    []net.IP
 	leases        map[string]net.IP // by client MAC string
 }
 
@@ -95,12 +99,26 @@ func (h *dhcpHandler) ServeDHCP(pkt dhcp4.Packet, msgType dhcp4.MessageType, opt
 func (h *dhcpHandler) reply(pkt dhcp4.Packet, mt dhcp4.MessageType, yiaddr net.IP, req dhcp4.Options) dhcp4.Packet {
 	base := dhcp4.Options{
 		dhcp4.OptionSubnetMask:       []byte(h.allocator.Subnet().Mask),
-		dhcp4.OptionDomainNameServer: []byte{9, 9, 9, 9}, // hardcoded quad 9 DNS server
 		dhcp4.OptionRootPath:         []byte(h.routerIP.To4()),
 		dhcp4.OptionRouter:           []byte(h.routerIP.To4()),
 		dhcp4.OptionServerIdentifier: []byte(h.serverIP.To4()),
 		// Also advertise TFTP server IP as a name string (option 66)
 		dhcp4.OptionTFTPServerName: []byte(h.nextServerIP.String()),
+	}
+	// Encode DNS servers if provided (option 6). Multiple IPv4 addresses are concatenated 4-byte values.
+	if len(h.dnsServers) > 0 {
+		var dnsBytes []byte
+		for _, ip := range h.dnsServers {
+			if ip4 := ip.To4(); ip4 != nil {
+				dnsBytes = append(dnsBytes, ip4...)
+			}
+		}
+		if len(dnsBytes) > 0 {
+			base[dhcp4.OptionDomainNameServer] = dnsBytes
+		}
+	} else {
+		// Default to Quad9
+		base[dhcp4.OptionDomainNameServer] = []byte{9, 9, 9, 9}
 	}
 	// Default root-path to "<routerIP>:" if none provided, so clients see a non-zero root addr
 	if h.rootPath != "" {

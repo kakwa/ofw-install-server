@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"log"
+	"net"
 	"os"
 	"os/signal"
 	"syscall"
@@ -24,6 +25,7 @@ func main() {
 	bootpEnable := flag.Bool("bootp", false, "Enable built-in BOOTP/DHCP server")
 	bootpRootPath := flag.String("bootp-rootpath", "", "Root-path option (optional)")
 	bootpFilename := flag.String("bootp-filename", "", "Filename/bootfile option (optional)")
+	bootpDNS := flag.String("bootp-dns", "", "Optional single IPv4 DNS for DHCP option 6 (default 9.9.9.9)")
 	// NFS/portmap flags
 	nfsEnable := flag.Bool("nfs", false, "enable minimal NFSv2 Server")
 	nfsFile := flag.String("nfs-file", "", "file to server using NFSv2 (step 2)")
@@ -82,8 +84,17 @@ func main() {
 	// Start BOOTP server if enabled
 	if *bootpEnable {
 		loggerBOOTP := log.New(os.Stdout, "bootp ", log.LstdFlags)
+		// Optional single DNS server
+		var dnsServers []net.IP
+		if *bootpDNS != "" {
+			if ip := net.ParseIP(*bootpDNS); ip != nil {
+				if ip4 := ip.To4(); ip4 != nil {
+					dnsServers = append(dnsServers, ip4)
+				}
+			}
+		}
 		// Defaults for router and next-server are the serverIP
-		_, err = bootp.StartBOOTPServer(*iface, ":67", allocator, serverIP, *bootpRootPath, *bootpFilename, loggerBOOTP)
+		_, err = bootp.StartBOOTPServer(*iface, ":67", allocator, serverIP, *bootpRootPath, *bootpFilename, dnsServers, loggerBOOTP)
 		if err != nil {
 			log.Fatalf("start bootp failure: %v", err)
 		}
