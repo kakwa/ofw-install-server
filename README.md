@@ -110,24 +110,6 @@ sudo ./ofw-install-server -iface ${BOOT_SERVER_NIC} -rarp \
   -nfs -nfs-file ./netbsd-INSTALL
 ```
 
-### Optional: enable routing/NAT on the host
-
-If your install environment needs Internet access via the host, enable IPv4 forwarding and a simple NAT:
-
-```shell
-WAN="wlp3s0"
-LAN="enp0s25"
-NETWORK="172.24.42.150"
-
-echo 1 > /proc/sys/net/ipv4/ip_forward
-iptables -F
-iptables -t nat -F
-iptables -A FORWARD -i ${LAN} -s ${NETWORK}/24 -j ACCEPT
-iptables -A FORWARD -i ${WAN} -d ${NETWORK}/24 -j ACCEPT
-iptables -t nat -A POSTROUTING -o ${WAN} -j MASQUERADE
-iptables -t nat -A POSTROUTING -o ${WAN} -j MASQUERADE
-```
-
 ### Flags
 
 - `-iface`: interface to bind (default: `enp0s25`)
